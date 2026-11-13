@@ -2,23 +2,14 @@ ARG BASE_IMAGE_ORG
 ARG BASE_IMAGE_NAME
 ARG BASE_IMAGE="${BASE_IMAGE_ORG}/${BASE_IMAGE_NAME}"
 ARG FEDORA_MAJOR_VERSION
-ARG AKMODS_FLAVOR
 ARG KERNEL
 ARG COMMON
 ARG BREW
 
-FROM ${COMMON} AS common
+FROM --platform=linux/amd64 ${COMMON} AS common
 FROM ${BREW} AS brew
 
-FROM ghcr.io/ublue-os/akmods:${AKMODS_FLAVOR}-${FEDORA_MAJOR_VERSION}-${KERNEL} AS akmods
-
-#if defined(NVIDIA)
-FROM ghcr.io/ublue-os/akmods-nvidia-open:${AKMODS_FLAVOR}-${FEDORA_MAJOR_VERSION}-${KERNEL} AS akmods-nvidia-open
-#endif
-
-#if defined(ZFS)
-FROM ghcr.io/ublue-os/akmods-zfs:${AKMODS_FLAVOR}-${FEDORA_MAJOR_VERSION}-${KERNEL} AS akmods-zfs
-#endif
+# /* Gravity: no ublue akmods; kernel-16k comes from the Gravity COPR (see 02-install-gravity-kernel.sh) */
 
 FROM scratch AS ctx
 COPY /build_scripts /build_scripts
@@ -37,9 +28,9 @@ COPY /system_files /system_files
 # /* aurora image section */
 FROM ${BASE_IMAGE}:${FEDORA_MAJOR_VERSION} AS base
 
-ARG AKMODS_FLAVOR="main"
 ARG BASE_IMAGE_NAME="${BASE_IMAGE_NAME}"
 ARG FEDORA_MAJOR_VERSION=""
+ARG AKMODS_FLAVOR="gravity"
 ARG IMAGE_NAME="aurora"
 ARG IMAGE_VENDOR="ublue-os"
 ARG KERNEL=""
@@ -53,83 +44,24 @@ ENV PATH="/tmp/scripts/helpers:${PATH}"
 
 # /* Install Packages, miscellaneous things that need a network */
 
-# /* aurora:latest no zfs or nvidia */
-#if !defined(NVIDIA) && !defined(ZFS)
+# /* aurora-gravity: Apple Silicon (aarch64, 16K pages) */
 RUN --mount=type=tmpfs,dst=/boot \
     --mount=type=tmpfs,dst=/var \
     --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache/libdnf5 \
-    --mount=type=bind,from=akmods,src=/kernel-rpms,dst=/tmp/kernel-rpms \
-    --mount=type=bind,from=akmods,src=/rpms/common,dst=/tmp/rpms/common \
-    --mount=type=bind,from=akmods,src=/rpms/kmods,dst=/tmp/rpms/kmods \
     --mount=type=secret,id=GITHUB_TOKEN \
     /ctx/build_scripts/shared/build-prep.sh && \
     /ctx/build_scripts/base/01-packages.sh && \
-    /ctx/build_scripts/base/02-install-common-kernel-akmods.sh && \
-    /ctx/build_scripts/base/03-fetch.sh
-#endif
-
-# /* aurora:stable with zfs no nvidia */
-#if !defined(NVIDIA) && defined(ZFS)
-RUN --mount=type=tmpfs,dst=/boot \
-    --mount=type=tmpfs,dst=/var \
-    --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=cache,dst=/var/cache/libdnf5 \
-    --mount=type=bind,from=akmods,src=/kernel-rpms,dst=/tmp/kernel-rpms \
-    --mount=type=bind,from=akmods,src=/rpms/common,dst=/tmp/rpms/common \
-    --mount=type=bind,from=akmods,src=/rpms/kmods,dst=/tmp/rpms/kmods \
-    --mount=type=bind,from=akmods-zfs,src=/rpms/kmods/zfs,dst=/tmp/rpms/kmods/zfs \
-    --mount=type=secret,id=GITHUB_TOKEN \
-    /ctx/build_scripts/shared/build-prep.sh && \
-    /ctx/build_scripts/base/01-packages.sh && \
-    /ctx/build_scripts/base/02-install-common-kernel-akmods.sh && \
-    /ctx/build_scripts/base/zfs.sh && \
-    /ctx/build_scripts/base/03-fetch.sh
-#endif
-
-# /* aurora-nvidia-open:latest no zfs */
-#if defined(NVIDIA) && !defined(ZFS)
-RUN --mount=type=tmpfs,dst=/boot \
-    --mount=type=tmpfs,dst=/var \
-    --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=cache,dst=/var/cache/libdnf5 \
-    --mount=type=bind,from=akmods,src=/kernel-rpms,dst=/tmp/kernel-rpms \
-    --mount=type=bind,from=akmods,src=/rpms/common,dst=/tmp/rpms/common \
-    --mount=type=bind,from=akmods,src=/rpms/kmods,dst=/tmp/rpms/kmods \
-    --mount=type=bind,from=akmods-nvidia-open,src=/rpms,dst=/tmp/rpms/nvidia \
-    --mount=type=secret,id=GITHUB_TOKEN \
-    /ctx/build_scripts/shared/build-prep.sh && \
-    /ctx/build_scripts/base/01-packages.sh && \
-    /ctx/build_scripts/base/02-install-common-kernel-akmods.sh && \
+    /ctx/build_scripts/base/02-install-gravity-kernel.sh && \
     /ctx/build_scripts/base/03-fetch.sh && \
-    /ctx/build_scripts/base/04-nvidia.sh
-#endif
-
-# /* aurora-nvidia-open:stable with ZFS */
-#if defined(NVIDIA) && defined(ZFS)
-RUN --mount=type=tmpfs,dst=/boot \
-    --mount=type=tmpfs,dst=/var \
-    --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=cache,dst=/var/cache/libdnf5 \
-    --mount=type=bind,from=akmods,src=/kernel-rpms,dst=/tmp/kernel-rpms \
-    --mount=type=bind,from=akmods,src=/rpms/common,dst=/tmp/rpms/common \
-    --mount=type=bind,from=akmods,src=/rpms/kmods,dst=/tmp/rpms/kmods \
-    --mount=type=bind,from=akmods-nvidia-open,src=/rpms,dst=/tmp/rpms/nvidia \
-    --mount=type=bind,from=akmods-zfs,src=/rpms/kmods/zfs,dst=/tmp/rpms/kmods/zfs \
-    --mount=type=secret,id=GITHUB_TOKEN \
-    /ctx/build_scripts/shared/build-prep.sh && \
-    /ctx/build_scripts/base/01-packages.sh && \
-    /ctx/build_scripts/base/02-install-common-kernel-akmods.sh && \
-    /ctx/build_scripts/base/03-fetch.sh && \
-    /ctx/build_scripts/base/04-nvidia.sh && \
-    /ctx/build_scripts/base/zfs.sh
-#endif
+    /ctx/build_scripts/base/05-gravity-platform.sh
 
 # /* Everything that can be done offline after things are in place should be done here */
 RUN --network=none \
     --mount=type=tmpfs,dst=/boot \
     --mount=type=bind,from=ctx,source=/,target=/ctx \
     /ctx/build_scripts/base/16-override-install.sh && \
+    /ctx/build_scripts/base/16-gravity-signing.sh && \
     /ctx/build_scripts/base/17-cleanup.sh && \
     /ctx/build_scripts/base/18-image-info.sh && \
     /ctx/build_scripts/base/19-initramfs.sh && \

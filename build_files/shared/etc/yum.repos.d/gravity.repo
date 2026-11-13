@@ -1,0 +1,9 @@
+[gravity]
+name=Gravity Linux for Fedora $releasever - $basearch
+baseurl=https://download.copr.fedorainfracloud.org/results/adevwithanidea/gravity/fedora-$releasever-$basearch/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-gravity
+skip_if_unavailable=False
+priority=10
