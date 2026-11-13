@@ -636,7 +636,8 @@ generate-point $image=default_image $tag=default_tag $flavor=default_flavor:
     tags="/tmp/${IMAGE_NAME}-tags.json"
 
     if [[ ! -f ${tags} ]]; then
-      skopeo list-tags docker://ghcr.io/{{ repo_organization }}/${IMAGE_NAME} > "${tags}"
+      # the repository does not exist before the first publish
+      skopeo list-tags docker://ghcr.io/{{ repo_organization }}/${IMAGE_NAME} > "${tags}" || echo '{"Tags": []}' > "${tags}"
     fi
 
     if [[ $(jq --arg tag "${tag}" --arg timestamp "${TIMESTAMP}" 'any(.Tags[]; contains($tag + "-" + $timestamp))' < "${tags}") == "true" ]]; then
