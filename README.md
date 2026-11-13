@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> **This is `aurora-gravity`**: an unofficial port of Aurora to Apple Silicon (aarch64) using the Gravity Linux 16K kernel. See **[README-GRAVITY.md](README-GRAVITY.md)** for what differs and how to install it. Please don't report issues with this build to ublue-os/aurora.
+
 # Aurora
 
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/a940189170c8456c85a75ea36edb32c7)](https://app.codacy.com/gh/ublue-os/aurora/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
