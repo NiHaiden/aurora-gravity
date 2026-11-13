@@ -109,8 +109,6 @@ NEGATIVO=(
     ffmpeg
     libheif
     libva
-    mesa-filesystem
-    mesa-dri-drivers
     pipewire-libs-extra
     x264-libs
     x265-libs
@@ -118,6 +116,44 @@ NEGATIVO=(
 
 for package in "${NEGATIVO[@]}"; do
   rpm -q --qf "%{NAME} %{VENDOR}" "${package}" | grep -q "negativo17\.org" || { echo "${package} not from negativo... Exiting"; exit 1 ; }
+done
+
+# aurora-gravity: Apple Silicon platform checks
+GRAVITY_PACKAGES=(
+    kernel-16k-core
+    mesa-dri-drivers
+    mesa-filesystem
+    mesa-vulkan-drivers
+    dracut-gravity
+    update-m1n1
+    gravity-bootloader
+    uboot-images-armv8
+)
+
+for package in "${GRAVITY_PACKAGES[@]}"; do
+  rpm -q --qf "%{RELEASE}" "${package}" | grep -q "gravity" || { echo "${package} is not the Gravity build... Exiting"; exit 1 ; }
+done
+
+if rpm -q kernel-core >/dev/null 2>&1; then
+  echo "Stock Fedora kernel-core is installed... Exiting"; exit 1
+fi
+
+mapfile -t KVERS < <(ls /usr/lib/modules)
+[[ "${#KVERS[@]}" -eq 1 && "${KVERS[0]}" =~ \+16k$ ]] || { echo "Expected exactly one 16k kernel, got: ${KVERS[*]}"; exit 1; }
+KDIR="/usr/lib/modules/${KVERS[0]}"
+test -f "${KDIR}/vmlinuz"
+test -f "${KDIR}/initramfs.img"
+test -f "${KDIR}/dtb/apple/t8132-j713.dtb" # MacBook Air 13" M4
+test -f /usr/lib64/m1n1/m1n1.bin
+test -f /usr/share/uboot/apple_m1/u-boot-nodtb.bin
+test -x /usr/libexec/aurora-gravity-m1n1-sync
+grep -q 'gzip -nc' /usr/bin/update-m1n1
+systemctl is-enabled aurora-gravity-m1n1-sync.service | grep -q '^enabled$'
+
+# Gravity dracut modules (Apple platform drivers + vendor firmware loading) must be in the initramfs
+INITRD_LIST=$(lsinitrd "${KDIR}/initramfs.img")
+for needle in gravity-firmware kernel-modules-gravity load-gravity-firmware.sh gravity-scripts/functions.sh; do
+  grep -q -- "${needle}" <<<"${INITRD_LIST}" || { echo "initramfs is missing ${needle}... Exiting"; exit 1; }
 done
 
 # these packages are supposed to be removed

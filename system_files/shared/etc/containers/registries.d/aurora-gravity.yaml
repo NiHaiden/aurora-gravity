@@ -1,0 +1,3 @@
+docker:
+  ghcr.io/nihaiden/aurora-gravity:
+    use-sigstore-attachments: true
