@@ -22,6 +22,12 @@ GRAVITY_PACKAGES=(
     linux-firmware-vendor
     gravity-audio-j713
     gravity-battery
+    # Valve's native ARM64 Steam client launcher (4K-page process via the P3S kernel).
+    # Pulls fex-guestos-mesa (x86 Mesa pinned to our Mesa revision) for x86 games.
+    # The client and Proton are downloaded per user at first start, not shipped here.
+    steam
+    # Recommends of steam; listed because weak deps are off: makes Proton (ARM64, Gravity) the default
+    steam-gravity-proton-default
 )
 
 dnf5 -y install --setopt=install_weak_deps=False "${GRAVITY_PACKAGES[@]}"

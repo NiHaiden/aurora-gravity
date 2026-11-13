@@ -141,6 +141,9 @@ GRAVITY_PACKAGES=(
     update-m1n1
     gravity-bootloader
     uboot-images-armv8
+    steam
+    steam-gravity-proton-default
+    fex-guestos-mesa
 )
 
 for package in "${GRAVITY_PACKAGES[@]}"; do
