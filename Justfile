@@ -738,6 +738,7 @@ setup-cache $image=default_image $tag=default_tag $flavor=default_flavor $ghcr="
     BLESSED_IMAGE=aurora-gravity
 
     CACHE_NAME="aurora-gravity/cache/dnf"
+    registry="${registry,,}" # GHCR paths must be lowercase (owner is NiHaiden)
     CACHE_IMAGE="${registry}/${CACHE_NAME}:${fedora_version}-$(arch)"
 
     # directory where buildah-cache-UID is
