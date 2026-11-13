@@ -51,6 +51,19 @@ rpm -q plasma-setup --qf "%{RELEASE}" | grep -q aurora
 test -f /usr/share/doc/aurora/aurora.pdf
 test -f /usr/share/homebrew.tar.zst
 
+# aurora-gravity: Homebrew's portable Ruby must match the image architecture.
+# A per-arch amd64 brew digest once shipped x86-64 Ruby on aarch64 and broke brew.
+BREW_RUBY_DIR="$(mktemp -d)"
+tar --zstd -xf /usr/share/homebrew.tar.zst -C "${BREW_RUBY_DIR}" --wildcards '*/vendor/portable-ruby/*/bin/ruby'
+BREW_RUBY="$(find "${BREW_RUBY_DIR}" -path '*/portable-ruby/*/bin/ruby' -type f | head -n1)"
+# ELF e_machine (offset 18, little endian): 0xb7 = aarch64, 0x3e = x86-64
+BREW_RUBY_MACHINE="$(od -An -tx1 -j18 -N1 "${BREW_RUBY}" | tr -d ' ')"
+case "$(uname -m)" in
+  aarch64) test "${BREW_RUBY_MACHINE}" = "b7" ;;
+  x86_64) test "${BREW_RUBY_MACHINE}" = "3e" ;;
+esac
+rm -rf "${BREW_RUBY_DIR}"
+
 desktop-file-validate \
   /usr/share/applications/dev.getaurora.discussions.desktop \
   /usr/share/applications/dev.getaurora.boot-to-windows.desktop \

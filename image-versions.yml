@@ -12,10 +12,13 @@ images:
     digest: sha256:1f301431774cd7a432886214aa3955a4cdec6f36e927a45f7e39984cc446c0d6
 
   # https://github.com/ublue-os/brew
+  # aurora-gravity: this must be the multi-arch *index* digest, not a per-arch
+  # manifest. The amd64 manifest ships an x86-64 portable Ruby, which breaks every
+  # brew command on aarch64 (20-tests.sh checks this).
   - name: brew
     image: ghcr.io/ublue-os/brew
     tag: latest
-    digest: sha256:d34d5c3112bbfe7e65713f6331796a2123cffa77ce7aff540adbcfcb9ee4d74d
+    digest: sha256:2993b28cf9a54efebdc418ef42228618f5c68e8b931430f2d60eddc190e30016
 
   # https://github.com/coreos/chunkah
   - name: chunkah
