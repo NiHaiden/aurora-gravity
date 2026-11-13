@@ -1,5 +1,5 @@
 # Min just version 1.46.0 https://github.com/casey/just/issues/2290
-export repo_organization := env("GITHUB_REPOSITORY_OWNER", "ublue-os")
+export repo_organization := lowercase(env("GITHUB_REPOSITORY_OWNER", "ublue-os"))
 export base_image_org := env("BASE_IMAGE_ORG", "quay.io/fedora-ostree-desktops")
 export base_image_name := env("BASE_IMAGE_NAME", "kinoite")
 
@@ -10,6 +10,8 @@ testing_version := "44"
 images := '(
     [aurora]=aurora
     [aurora-dx]=aurora-dx
+    [aurora-gravity]=aurora-gravity
+    [aurora-gravity-dx]=aurora-gravity-dx
 )'
 
 flavors := '(
@@ -23,7 +25,7 @@ tags := '(
     [testing]=testing
 )'
 
-default_image := "aurora"
+default_image := "aurora-gravity"
 default_tag := "latest"
 default_flavor := "main"
 
@@ -150,56 +152,16 @@ build $image=default_image $tag=default_tag $flavor=default_flavor $rechunk="fal
     ALL_IMAGES=()
     ALL_IMAGES+=("${BASE_IMAGE_REF}")
 
-    # Here we pin our kernels to workaround regressions!
-    # skopeo list-tags docker://ghcr.io/ublue-os/akmods | jq -r '.Tags | map(select(contains("coreos-stable-44")))'
-
-    ARCH=$(arch)
+    # aurora-gravity: the kernel is Gravity Linux's kernel-16k from COPR
+    # (adevwithanidea/gravity), installed in 02-install-gravity-kernel.sh.
+    # Here we only resolve its uname-style release for the ostree.linux label.
     if [[ -z "${kernel_pin:-}" ]]; then
-      case "${tag}" in
-              stable)
-                  if [[ "${ARCH}" == "x86_64" ]]; then
-                      # <Here is a link why we have it pinned>
-                      kernel_pin=""
-                  elif [[ "${ARCH}" == "aarch64" ]]; then
-                      kernel_pin=""
-                  fi
-                  ;;
-              latest)
-                  if [[ "${ARCH}" == "x86_64" ]]; then
-                      kernel_pin=""
-                  elif [[ "${ARCH}" == "aarch64" ]]; then
-                      kernel_pin=""
-                  fi
-                  ;;
-              testing)
-                  if [[ "${ARCH}" == "x86_64" ]]; then
-                      kernel_pin=""
-                  elif [[ "${ARCH}" == "aarch64" ]]; then
-                      kernel_pin=""
-                  fi
-                  ;;
-      esac
-    fi
-
-    if [[ -z "${kernel_pin:-}" ]]; then
-        kernel_release=$(skopeo inspect --retry-times 3 docker://ghcr.io/ublue-os/akmods:"${akmods_flavor}"-"${fedora_version}" | jq -r '.Labels["ostree.linux"]')
+        gravity_kernel_evr=$(curl -fsSL --retry 3 \
+          "https://copr.fedorainfracloud.org/api_3/package?ownername=adevwithanidea&projectname=gravity&packagename=kernel&with_latest_succeeded_build=true" \
+          | jq -r '.builds.latest_succeeded.source_package.version')
+        kernel_release="${gravity_kernel_evr}.fc${fedora_version}.aarch64+16k"
     else
         kernel_release="${kernel_pin}"
-    fi
-
-    BASENAME_AKMODS="ghcr.io/ublue-os/akmods"
-
-    AKMODS="${BASENAME_AKMODS}:${akmods_flavor}-${fedora_version}-${kernel_release}"
-    ALL_IMAGES+=("${AKMODS}")
-
-    if [[ "${akmods_flavor}" =~ coreos ]]; then
-        AKMODS_ZFS="${BASENAME_AKMODS}-zfs:${akmods_flavor}-${fedora_version}-${kernel_release}"
-        ALL_IMAGES+=("${AKMODS_ZFS}")
-    fi
-
-    if [[ "${flavor}" =~ nvidia-open ]]; then
-        AKMODS_NVIDIA_OPEN="${BASENAME_AKMODS}-nvidia-open:${akmods_flavor}-${fedora_version}-${kernel_release}"
-        ALL_IMAGES+=("${AKMODS_NVIDIA_OPEN}")
     fi
 
     {{ retry_function }}
@@ -224,7 +186,12 @@ build $image=default_image $tag=default_tag $flavor=default_flavor $rechunk="fal
     # transient network issues
     if [[ "${retry_pull}" == "true" ]]; then
       for fetch_image in "${ALL_IMAGES[@]}"; do
-        retry 5 60 ${PODMAN} pull ${fetch_image}
+        # common is a files-only image published for amd64 only
+        if [[ "${fetch_image}" == "{{ common }}" ]]; then
+          retry 5 60 ${PODMAN} pull --arch=amd64 ${fetch_image}
+        else
+          retry 5 60 ${PODMAN} pull ${fetch_image}
+        fi
       done
     fi
 
@@ -246,14 +213,15 @@ build $image=default_image $tag=default_tag $flavor=default_flavor $rechunk="fal
            BUILD_ARGS+=("--build-arg" "IMAGE_FLAVOR=dx")
            target="dx"
     fi
-    BUILD_ARGS+=("--build-arg" "AKMODS_FLAVOR=${akmods_flavor}")
+    BUILD_ARGS+=("--build-arg" "AKMODS_FLAVOR=gravity")
     BUILD_ARGS+=("--build-arg" "BASE_IMAGE_ORG=${base_image_org}")
     BUILD_ARGS+=("--build-arg" "BASE_IMAGE_NAME=${base_image_name}")
     BUILD_ARGS+=("--build-arg" "FEDORA_MAJOR_VERSION=${fedora_version}")
     BUILD_ARGS+=("--build-arg" "COMMON={{ common }}")
     BUILD_ARGS+=("--build-arg" "BREW={{ brew }}")
     BUILD_ARGS+=("--build-arg" "IMAGE_NAME=${image_name}")
-    BUILD_ARGS+=("--build-arg" "IMAGE_VENDOR={{ repo_organization }}")
+    image_vendor="{{ repo_organization }}"
+    BUILD_ARGS+=("--build-arg" "IMAGE_VENDOR=${image_vendor,,}")
     BUILD_ARGS+=("--build-arg" "KERNEL=${kernel_release}")
     BUILD_ARGS+=("--build-arg" "VERSION=${ver}")
     if [[ -z "$(git status -s)" ]]; then
@@ -267,17 +235,17 @@ build $image=default_image $tag=default_tag $flavor=default_flavor $rechunk="fal
     LABELS=()
     LABELS+=("--label" "containers.bootc=1")
     LABELS+=("--label" "io.artifacthub.package.deprecated=false")
-    LABELS+=("--label" "io.artifacthub.package.keywords=bootc,fedora,aurora,ublue,universal-blue,kde,linux")
+    LABELS+=("--label" "io.artifacthub.package.keywords=bootc,fedora,aurora,ublue,universal-blue,kde,linux,apple-silicon,gravity")
     LABELS+=("--label" "io.artifacthub.package.logo-url=https://avatars.githubusercontent.com/u/120078124?s=200&v=4")
     LABELS+=("--label" "io.artifacthub.package.maintainers=[{\"name\": \"NiHaiden\", \"email\": \"me@nhaiden.io\"}]")
-    LABELS+=("--label" "io.artifacthub.package.readme-url=https://raw.githubusercontent.com/ublue-os/aurora/refs/heads/main/README.md")
+    LABELS+=("--label" "io.artifacthub.package.readme-url=https://raw.githubusercontent.com/NiHaiden/aurora-gravity/refs/heads/gravity/README.md")
     LABELS+=("--label" "org.opencontainers.image.created=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)")
-    LABELS+=("--label" "org.opencontainers.image.description=The ultimate productivity workstation")
+    LABELS+=("--label" "org.opencontainers.image.description=Aurora for Apple Silicon, built on the Gravity Linux kernel")
     LABELS+=("--label" "org.opencontainers.image.documentation=https://docs.getaurora.dev")
-    LABELS+=("--label" "org.opencontainers.image.source=https://raw.githubusercontent.com/ublue-os/aurora/refs/heads/main/Containerfile.in")
+    LABELS+=("--label" "org.opencontainers.image.source=https://github.com/NiHaiden/aurora-gravity")
     LABELS+=("--label" "org.opencontainers.image.title=${image_name}")
     LABELS+=("--label" "org.opencontainers.image.url=https://getaurora.dev")
-    LABELS+=("--label" "org.opencontainers.image.vendor={{ repo_organization }}")
+    LABELS+=("--label" "org.opencontainers.image.vendor=${image_vendor,,}")
     LABELS+=("--label" "org.opencontainers.image.version=${ver}")
     if [[ -z "$(git status -s)" ]]; then
         LABELS+=("--label" "org.opencontainers.image.revision=$(git rev-parse HEAD)")
@@ -285,10 +253,6 @@ build $image=default_image $tag=default_tag $flavor=default_flavor $rechunk="fal
         LABELS+=("--label" "org.opencontainers.image.revision=deadbeef")
     fi
     LABELS+=("--label" "ostree.linux=${kernel_release}")
-
-    case "${akmods_flavor}" in
-    "coreos-stable") BUILD_ARGS+=("--cpp-flag=-DZFS") ;;
-    esac
 
     if [[ "${image_name}" =~ nvidia ]]; then
         BUILD_ARGS+=("--cpp-flag=-DNVIDIA")
@@ -770,9 +734,9 @@ setup-cache $image=default_image $tag=default_tag $flavor=default_flavor $ghcr="
     fedora_version=$({{ just }} fedora_version --image "${image}" --tag "${tag}" --flavor "${flavor}")
 
     # compromise between most shared packages
-    BLESSED_IMAGE=aurora-dx
+    BLESSED_IMAGE=aurora-gravity
 
-    CACHE_NAME="aurora/cache/dnf"
+    CACHE_NAME="aurora-gravity/cache/dnf"
     CACHE_IMAGE="${registry}/${CACHE_NAME}:${fedora_version}-$(arch)"
 
     # directory where buildah-cache-UID is

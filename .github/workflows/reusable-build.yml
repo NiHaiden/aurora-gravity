@@ -4,12 +4,12 @@ on:
     inputs:
       image_flavors:
         description: "JSON string of flavors to build, '[main, nvidia-open]'"
-        default: "['main','nvidia-open']"
+        default: "['main']"
         type: string
       brand_name:
-        description: "The Brand Name: aurora"
+        description: "The Brand Name: aurora-gravity"
         required: false
-        default: aurora
+        default: aurora-gravity
         type: string
       stream_name:
         description: "The Fedora Version: stable, or latest"
@@ -17,7 +17,7 @@ on:
         type: string
       architecture:
         description: "JSON string of architectures to build, '[aarch64, x86_64]'"
-        default: "['x86_64']"
+        default: "['aarch64']"
         required: false
         type: string
       publish:
@@ -214,19 +214,6 @@ jobs:
             --flavor "${MATRIX_IMAGE_FLAVOR}" \
             "${SYFT_CMD}"
 
-      - name: Secureboot Check
-        id: secureboot
-        shell: bash
-        env:
-          MATRIX_BASE_NAME: ${{ matrix.base_name }}
-          MATRIX_STREAM_NAME: ${{ matrix.stream_name }}
-          MATRIX_IMAGE_FLAVOR: ${{ matrix.image_flavor }}
-        run: |
-         $(command -v just) secureboot \
-            --image "${MATRIX_BASE_NAME}" \
-            --tag "${MATRIX_STREAM_NAME}" \
-            --flavor "${MATRIX_IMAGE_FLAVOR}"
-
       - name: Export to OCI Archive
         if: github.event_name == 'pull_request'
         id: oci-archive
@@ -253,7 +240,7 @@ jobs:
       - name: Create Bootable Image
         id: bootc-install
         # doing other images is not worth it
-        if: github.event_name == 'pull_request' && matrix.base_name == 'aurora' && matrix.image_flavor == 'main'
+        if: github.event_name == 'pull_request' && matrix.base_name == 'aurora-gravity' && matrix.image_flavor == 'main'
         # free disk space varies
         continue-on-error: true
         env:
