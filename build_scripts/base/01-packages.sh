@@ -10,22 +10,25 @@ dnf versionlock add "qt6-*" "plasma-desktop"
 
 PLASMA_VERS=$(rpm -q --qf "%{VERSION}" plasma-desktop)
 
+# Gravity: Mesa must come from the Gravity COPR (Apple AGX/Asahi driver), never
+# from negativo17. Only take the codec-related overrides from negativo.
 OVERRIDES=(
-    "intel-gmmlib"
-    "intel-mediasdk"
     "libheif"
     "libva"
-    "libva-intel-media-driver"
-    "mesa-dri-drivers"
-    "mesa-filesystem"
-    "mesa-libEGL"
-    "mesa-libGL"
-    "mesa-libgbm"
-    "mesa-vulkan-drivers"
 )
 
 dnf5 distro-sync --skip-unavailable --allowerasing -y --repo='fedora-multimedia' --from-vendor='negativo17.org' "${OVERRIDES[@]}"
 dnf5 versionlock add "${OVERRIDES[@]}"
+
+# Swap Fedora's Mesa for Gravity's (the gravity repo has priority=10, so it wins)
+# and lock it so later transactions can't revert it.
+MESA_PKGS=( $(rpm -qa --qf '%{NAME}\n' 'mesa-*') )
+dnf5 distro-sync -y --allowerasing "${MESA_PKGS[@]}"
+dnf5 -y install --skip-unavailable mesa-dri-drivers mesa-vulkan-drivers mesa-libOpenCL
+if rpm -qa --qf '%{RELEASE}\n' mesa-dri-drivers | grep -qv gravity; then
+    echo "mesa-dri-drivers is not the Gravity build"; exit 1
+fi
+dnf5 versionlock add 'mesa-*'
 
 FEDORA_PACKAGES=(
     adcli
@@ -57,7 +60,6 @@ FEDORA_PACKAGES=(
     htop
     icoutils
     ifuse
-    igt-gpu-tools
     input-remapper
     iwd
     just

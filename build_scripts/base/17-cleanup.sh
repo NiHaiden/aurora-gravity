@@ -44,6 +44,9 @@ systemctl --global enable speech-dispatcher.socket
 # Updater
 systemctl enable uupd.timer
 
+# aurora-gravity: keep m1n1 stage 2 (DTBs/U-Boot) in sync with the next-boot deployment
+systemctl enable aurora-gravity-m1n1-sync.service
+
 # Disable the old update timer
 systemctl disable rpm-ostreed-automatic.timer
 

@@ -1,0 +1,22 @@
+[Unit]
+Description=Sync m1n1 stage 2 (DTBs, U-Boot) with the next-boot ostree deployment
+Documentation=https://github.com/NiHaiden/aurora-gravity
+ConditionPathExists=/proc/device-tree/chosen/gravity,efi-system-partition
+ConditionPathExists=/run/ostree-booted
+RequiresMountsFor=/sysroot /boot
+After=local-fs.target
+# Stop jobs run in reverse order: being ordered Before= finalize-staged means our
+# ExecStop runs after the staged deployment has been finalized at shutdown.
+Before=ostree-finalize-staged.service
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/aurora-gravity-m1n1-sync
+ExecStop=/usr/libexec/aurora-gravity-m1n1-sync
+
+[Install]
+WantedBy=multi-user.target

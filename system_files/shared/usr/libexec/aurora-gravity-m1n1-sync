@@ -1,0 +1,40 @@
+#!/usr/bin/bash
+# Keep m1n1 stage 2 (ESP:/m1n1/boot.bin = m1n1 + DTBs + U-Boot) in sync with the
+# ostree deployment that will boot next.
+#
+# ostree lists the default (next-boot) deployment first, and a staged deployment
+# is listed before the booted one. So "first deployment" is always the right
+# source, whether we run at boot or at shutdown, before or after
+# ostree-finalize-staged. update-m1n1 itself only rewrites boot.bin (and keeps
+# boot.bin.old) when the content changed.
+
+set -euo pipefail
+
+if [[ ! -r /proc/device-tree/chosen/gravity,efi-system-partition ]]; then
+    echo "Not booted via Gravity m1n1 (no gravity,efi-system-partition in /chosen), skipping"
+    exit 0
+fi
+
+line=$(ostree admin status 2>/dev/null | grep -m1 -E '^[*[:space:]]+[^[:space:]]+[[:space:]]+[0-9a-f]{64}\.[0-9]+' || true)
+if [[ -z "${line}" ]]; then
+    echo "Could not determine the default ostree deployment" >&2
+    exit 1
+fi
+read -r -a fields <<<"${line#\*}"
+osname="${fields[0]}"
+deploy="/sysroot/ostree/deploy/${osname}/deploy/${fields[1]}"
+
+kver=$(ls "${deploy}/usr/lib/modules" | head -n1)
+export DTBS="${deploy}/usr/lib/modules/${kver}/dtb"
+export M1N1="${deploy}/usr/lib64/m1n1/m1n1.bin"
+export U_BOOT="${deploy}/usr/share/uboot/apple_m1/u-boot-nodtb.bin"
+
+for f in "${DTBS}" "${M1N1}" "${U_BOOT}"; do
+    if [[ ! -e "${f}" ]]; then
+        echo "Missing ${f}, refusing to touch boot.bin" >&2
+        exit 1
+    fi
+done
+
+echo "Updating m1n1 stage 2 from deployment ${fields[1]} (kernel ${kver})"
+exec /usr/bin/update-m1n1
