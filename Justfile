@@ -861,6 +861,7 @@ push-image $image=default_image $tag=default_tag $flavor=default_flavor $ghcr="f
     #!/usr/bin/env bash
     set -eoux pipefail
 
+    registry="${registry,,}" # GHCR paths must be lowercase
     PUSH_CMD_ARGS=()
     PUSH_CMD_ARGS+=("--digestfile=/tmp/digestfile")
     PUSH_CMD_ARGS+=("--compression-format=zstd")
