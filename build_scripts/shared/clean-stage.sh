@@ -12,7 +12,6 @@ dnf versionlock clear
 rm -rf /usr/lib/sysimage/libdnf5/*
 
 # This comes last because we can't *ever* afford to ship fedora flatpaks on the image
-systemctl disable flatpak-add-fedora-repos.service
 systemctl mask flatpak-add-fedora-repos.service
 rm -f /usr/lib/systemd/system/flatpak-add-fedora-repos.service
 
@@ -41,7 +40,7 @@ find /run -mindepth 1 \
   ! -path '/run/.containerenv' \
   -delete
 
-rm -rf /tmp/*
+rm -rf /tmp/* /tmp/.*
 mkdir -p /var/tmp
 
 # Needs to be here to make the main image build strict (no /opt there)

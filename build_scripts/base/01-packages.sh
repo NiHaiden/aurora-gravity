@@ -4,6 +4,8 @@ echo "::group:: ===$(basename "$0")==="
 
 set -ouex pipefail
 
+dnf makecache --refresh
+
 # Prevent partial upgrading, major kde version updates black screened
 # https://github.com/ublue-os/aurora/issues/1227
 dnf versionlock add "qt6-*" "plasma-desktop"
@@ -15,6 +17,7 @@ PLASMA_VERS=$(rpm -q --qf "%{VERSION}" plasma-desktop)
 OVERRIDES=(
     "libheif"
     "libva"
+    "openh264"
 )
 
 dnf5 distro-sync --skip-unavailable --allowerasing -y --repo='fedora-multimedia' --from-vendor='negativo17.org' "${OVERRIDES[@]}"
@@ -40,7 +43,6 @@ FEDORA_PACKAGES=(
     distrobox
     evtest
     fastfetch
-    fcitx5-{chewing,chinese-addons,configtool,gtk,hangul,libthai,m17n,mozc,qt,sayura,unikey}
     fish
     flatpak-spawn
     foo2zjs
@@ -63,8 +65,8 @@ FEDORA_PACKAGES=(
     input-remapper
     iwd
     just
-    kate
-    kcm-fcitx5
+    kate{-krunner-plugin,-plugins}
+    fzf # for just
     krb5-workstation
     ksystemlog
     libcamera-gstreamer
@@ -82,8 +84,10 @@ FEDORA_PACKAGES=(
     pamu2fcfg
     plasma-firewall-"${PLASMA_VERS}"
     plasma-oxygen
-    plasma-union-"${PLASMA_VERS}"
-    plasma-wallpapers-dynamic
+    # TODO: look into removing this, plasma supports the transition feature of this natively
+    plasma-wallpapers-dynamic-builder
+    plasma-wallpapers-dynamic-builder{-bash,-fish,-zsh}-completion
+    pocl
     powertop
     rclone
     restic
@@ -99,11 +103,13 @@ FEDORA_PACKAGES=(
     tmux
     traceroute
     vim
+    xdg-native-messaging-proxy
     yubikey-manager
     zsh
 )
 
 FEDORA_PACKAGES_AMD64=(
+    intel-compute-runtime
     powerstat
   )
 
@@ -126,10 +132,9 @@ if [[ $(arch) == x86_64 ]]; then
   PACKAGES+=( "${FEDORA_PACKAGES_AMD64[@]}" "${NEGATIVO_PACKAGES_AMD64[@]}" )
 fi
 
-dnf -y install --enablerepo='fedora-multimedia' "${PACKAGES[@]}"
-
-# Fedora Tailscale is usually behind
-dnf -y install --from-repo='tailscale-stable' tailscale
+dnf -y install \
+  --setopt=install_weak_deps=False \
+  --enablerepo='fedora-multimedia' "${PACKAGES[@]}"
 
 COPR_UBLUE_OS_PACKAGES=(
     kcm_ublue
@@ -137,19 +142,47 @@ COPR_UBLUE_OS_PACKAGES=(
     oversteer-udev
     # https://github.com/ublue-os/akmods/issues/537
     ublue-os-selinux-workarounds
-    uupd
-  )
+)
 
-dnf -y install --from-repo='copr:copr.fedorainfracloud.org:ublue-os:packages' "${COPR_UBLUE_OS_PACKAGES[@]}"
+TERRA_PACKAGES=(
+  # our auto-updater
+  uupd
+  # used in motd, in general useful to have
+  nerdfontssymbolsonly-nerd-fonts
+  game-devices-udev
+)
 
-dnf -y install --from-repo='copr:copr.fedorainfracloud.org:ledif:kairpods' kairpods
+if [[ "${UBLUE_IMAGE_TAG}" == "testing" ]]; then
+  TERRA_PACKAGES=( "${TERRA_PACKAGES[@]}" cardwire-gui )
+  dnf-retry -y 'do' \
+    --from-repo="terra" \
+    --action install "${TERRA_PACKAGES[@]}" \
+    --action remove switcheroo-control
+else
+  dnf-retry -y 'do' \
+    --from-repo="terra" \
+    --action install "${TERRA_PACKAGES[@]}"
+fi
 
-dnf -y install --from-repo='copr:copr.fedorainfracloud.org:lizardbyte:stable' sunshine
+# Fedora Tailscale is usually behind
+TAILSCALE=(tailscale)
+
+
+COPR_PREFIX="copr:copr.fedorainfracloud.org"
+
+dnf -y install --from-repo="${COPR_PREFIX}:ublue-os:packages" "${COPR_UBLUE_OS_PACKAGES[@]}"
+
+# TODO: figure something out that works well across DX, nvidia with the ublue-os coprs
+# so we can have less transactions, while still not being vulnerable to copr injections
+# shellcheck disable=SC1010
+dnf do -y \
+  --action install --from-repo="${COPR_PREFIX}:ledif:kairpods" kairpods \
+  --action install --from-repo="${COPR_PREFIX}:lizardbyte:stable" Sunshine \
+  --action install --from-repo='tailscale-stable' "${TAILSCALE[@]}"
 
 # Packages to exclude - common to all versions
 EXCLUDED_PACKAGES=(
     akonadi-server{,-mysql}
-    default-fonts-cjk-sans
     fedora-bookmarks
     fedora-chromium-config{,-kde}
     fedora-third-party
@@ -160,6 +193,8 @@ EXCLUDED_PACKAGES=(
     krfb{,-libs}
     plasma-discover{,-libs}
     plasma-welcome-fedora
+    # https://github.com/ublue-os/aurora/issues/3066
+    xwaylandvideobridge
 )
 
 dnf -y remove "${EXCLUDED_PACKAGES[@]}"

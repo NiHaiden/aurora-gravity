@@ -1,0 +1,15 @@
+enable aurora-groups.service
+enable bootc-update-ca-trust.service
+enable bootc-update-crypto-policies.service
+enable cardwired.service
+enable brew-setup.service
+enable dconf-update.service
+enable flatpak-preinstall.service
+enable input-remapper.service
+enable aurora-iwd-deprecation-notifier.timer
+# DO NOT REMOVE THIS
+# see /usr/bin/rechunker-group-fix
+enable rechunker-group-fix.service
+enable tailscaled.service
+enable ublue-system-setup.service
+enable uupd.timer

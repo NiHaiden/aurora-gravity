@@ -1,11 +1,15 @@
 # Min just version 1.46.0 https://github.com/casey/just/issues/2290
 export repo_organization := lowercase(env("GITHUB_REPOSITORY_OWNER", "ublue-os"))
-export base_image_org := env("BASE_IMAGE_ORG", "quay.io/fedora-ostree-desktops")
-export base_image_name := env("BASE_IMAGE_NAME", "kinoite")
+export base_image_org := lowercase(env("BASE_IMAGE_ORG", "quay.io/fedora-ostree-desktops"))
+export base_image_name := lowercase(env("BASE_IMAGE_NAME", "kinoite"))
 
-stable_version := "44"
-latest_version := "44"
-testing_version := "44"
+stable_version := "45"
+latest_version := "45"
+testing_version := "45"
+# aurora-gravity: Fedora release of the Gravity COPR chroot we install from
+# (see build_files/shared/usr/share/dnf5/repos.d/gravity.repo). Gravity has no
+# fedora-45 chroot yet, so the F45 image uses its fc44 kernel, Mesa and platform packages.
+gravity_fedora_version := "44"
 
 images := '(
     [aurora]=aurora
@@ -59,6 +63,17 @@ retry() {
         "${@}" && r=0 && break || r=$?
     done
     return $r
+}
+'
+
+# Define a lowercase function for use in recipes
+lowercase_function := '
+lowercase() {
+    if [[ "${#}" -ne 1 ]]; then
+        echo "lowercase usage: <string>"
+        return 1
+    fi
+    printf "%s" "${1,,}"
 }
 '
 
@@ -159,7 +174,7 @@ build $image=default_image $tag=default_tag $flavor=default_flavor $rechunk="fal
         gravity_kernel_evr=$(curl -fsSL --retry 3 \
           "https://copr.fedorainfracloud.org/api_3/package?ownername=adevwithanidea&projectname=gravity&packagename=kernel&with_latest_succeeded_build=true" \
           | jq -r '.builds.latest_succeeded.source_package.version')
-        kernel_release="${gravity_kernel_evr}.fc${fedora_version}.aarch64+16k"
+        kernel_release="${gravity_kernel_evr}.fc{{ gravity_fedora_version }}.aarch64+16k"
     else
         kernel_release="${kernel_pin}"
     fi
@@ -318,70 +333,6 @@ rechunk $image=default_image $tag=default_tag $flavor=default_flavor:
     CHUNKED_IMAGE="$(podman pull "oci:${CHUNKAH_OUTPUT_DIR}/chunked")"
     podman tag "${CHUNKED_IMAGE}" "${image_name}:${tag}"
 
-# build-chunked-oci
-[arg("flavor", long="flavor", short="f")]
-[arg("ghcr", long="ghcr", value="true")]
-[arg("image", long="image", short="i")]
-[arg("previous_build", long="previous-build", value="true")]
-[arg("tag", long="tag", short="t")]
-[group('Image')]
-ostree-rechunk $image=default_image $tag=default_tag $flavor=default_flavor $ghcr="false" $previous_build="false":
-    #!/usr/bin/env bash
-    set -eoux pipefail
-
-    {{ just }} validate --image "${image}" --tag "${tag}" --flavor "${flavor}"
-    image_name=$({{ just }} image_name --image "${image}" --tag "${tag}" --flavor "${flavor}")
-    fedora_version=$({{ just }} fedora_version --image "${image}" --tag "${tag}" --flavor "${flavor}")
-
-    if [[ "{{ ghcr }}" == "false" ]]; then
-      {{ just }} load-rootful --image "${image}" --tag "${tag}" --flavor "${flavor}"
-    fi
-
-    # TODO: Redo everything here with --previous-build in rpm-ostree 2026.1+
-    # so we don't have to pull an old image + rename it
-    if [[ "${previous_build}" == "true" ]]; then
-      PREVIOUS_IMAGE=ghcr.io/{{ repo_organization }}/"${image_name}":"${tag}"
-
-      # https://github.com/coreos/rpm-ostree/blob/7e2f2065a4aa4d5965b4537bb7d74e0b2898650e/rust/src/compose.rs#L522-L529
-      if skopeo inspect docker://"${PREVIOUS_IMAGE}" | jq -e '.LayersData[1:] | all(.Annotations?["ostree.components"]?)'; then
-        ${SUDOIF} ${PODMAN} pull ${PREVIOUS_IMAGE}
-      else
-        echo "${PREVIOUS_IMAGE} doesn't exist. Making a fresh layer Plan instead."
-      fi
-    fi
-
-    if [[ "${ghcr}" == "true" ]]; then
-      CHUNKED_IMAGE="${image_name}:${tag}"
-        if [[ "${previous_build}" == "true" ]]; then
-          CHUNKED_IMAGE="${PREVIOUS_IMAGE}"
-        fi
-    else
-      # keep the original unrechunked image for local builds
-      CHUNKED_IMAGE="${image_name}:${tag}-chunked"
-    fi
-
-    # 96 layers, conservative default, same what ci-test is using
-    # one layer is secretly being added for the ostree export
-    # 499 is podman run limit
-    # 128 is docker pull limit
-    ${SUDOIF} ${PODMAN} run --rm \
-        --privileged \
-        -v "/var/lib/containers:/var/lib/containers" \
-        --entrypoint /usr/bin/rpm-ostree \
-        "${base_image_org}/${base_image_name}:${fedora_version}" \
-        compose build-chunked-oci \
-        --max-layers 127 \
-        --format-version=2 \
-        --bootc \
-        --from "localhost/${image_name}:${tag}" \
-        --output containers-storage:${CHUNKED_IMAGE}
-
-        # rename the image to localhost
-        if [[ "${ghcr}" == "true" && "${previous_build}" == "true" ]]; then
-          ${SUDOIF} ${PODMAN} tag ${CHUNKED_IMAGE} "${image_name}:${tag}"
-          ${SUDOIF} ${PODMAN} image rm -f ${CHUNKED_IMAGE}
-        fi
-
 # For Privileged operations
 [arg("flavor", long="flavor", short="f")]
 [arg("image", long="image", short="i")]
@@ -436,7 +387,7 @@ run $image=default_image $tag=default_tag $flavor=default_flavor:
     fi
 
     # Run Container
-    ${PODMAN} run -it --rm "${image_name}:${tag}" bash
+    ${PODMAN} run -it --rm "${image_name}:${tag}" bash -l
 
 # Test Changelogs
 [group('Changelogs')]
@@ -522,7 +473,8 @@ akmods_flavor tag=default_tag:
     set -eou pipefail
 
     if [[ "{{ tag }}" =~ stable ]]; then
-        akmods_flavor="coreos-stable"
+        # Temporarily use coreos-testing until coreos-stable moves to Fedora 45
+        akmods_flavor="coreos-testing"
     elif [[ "{{ tag }}" =~ testing ]]; then
         akmods_flavor="main"
     else
@@ -594,7 +546,6 @@ generate-build-tags $image=default_image $tag=default_tag $flavor=default_flavor
     # No special handling here for testing for now
     if [[ "{{ tag }}" == stable ]]; then
       # Legacy Compatibility Tag so stable-daily points to stable, do not remove this
-      # TODO: Move this to :latest after the ZFS removal to get daily updates again
       BUILD_TAGS+=("{{ tag }}-daily")
       BUILD_TAGS+=("${version}")
       BUILD_TAGS+=("{{ tag }}-daily-${version}")
@@ -711,6 +662,47 @@ gen-sbom $image=default_image $tag=default_tag $flavor=default_flavor $syft_cmd=
 
     rm -rf "${ROOTFS}"
 
+# Attach sbom to exisitng image
+[arg("digest", long="digest")]
+[arg("flavor", long="flavor", short="f")]
+[arg("image", long="image", short="i")]
+[arg("registry", long="registry")]
+[arg("tag", long="tag", short="t")]
+[group('Utility')]
+attach-sbom $image=default_image $tag=default_tag $flavor=default_flavor $registry="" $digest="":
+    #!/usr/bin/env bash
+    set -eoux pipefail
+
+    {{ lowercase_function }}
+
+    registry="$(lowercase "${registry}")"
+
+    {{ just }} validate --image "${image}" --tag "${tag}" --flavor "${flavor}"
+    image_name=$({{ just }} image_name --image "${image}" --tag "${tag}" --flavor "${flavor}")
+
+    OUT_DIR="sbom_out/${image_name}"
+    SBOM="sbom.json"
+    FULL_SBOM_PATH="${OUT_DIR}/${SBOM}"
+    IMAGE="${registry}/${image_name}:${tag}@${digest}"
+
+    # we need to be in the directory of the sbom json file or else we end up having the directories in the oci artifact
+    pushd "${OUT_DIR}"
+
+    oras attach \
+      --artifact-type application/vnd.spdx+json \
+      --annotation filename="${SBOM}" \
+      "${IMAGE}" \
+      "${SBOM}"
+
+    popd
+
+    SBOM_DIGEST="$(oras discover --format json "${IMAGE}" | jq -r '.referrers[] | select(.artifactType == "application/vnd.spdx+json") | .digest')"
+
+    echo "${SBOM_DIGEST}" > /tmp/sbom-digestfile
+
+    # debugging
+    echo "oras pull ${registry}/${image_name}:${tag}@${SBOM_DIGEST}"
+
 # We are not using https://github.com/actions/cache because of:
 # https://github.com/ublue-os/aurora/issues/2351
 # https://github.com/actions/cache/issues/1537
@@ -728,7 +720,11 @@ gen-sbom $image=default_image $tag=default_tag $flavor=default_flavor $syft_cmd=
 [private]
 setup-cache $image=default_image $tag=default_tag $flavor=default_flavor $ghcr="false" $pull="false" $push="false" $registry="" $github_event="":
     #!/usr/bin/env bash
-    set -eou pipefail
+    set -eoux pipefail
+
+    {{ lowercase_function }}
+
+    registry="$(lowercase "${registry}")"
 
     image_name=$({{ just }} image_name --image "${image}" --tag "${tag}" --flavor "${flavor}")
 
@@ -750,7 +746,7 @@ setup-cache $image=default_image $tag=default_tag $flavor=default_flavor $ghcr="
     BLESSED_DAY="Sunday"
 
     # Always attempt to pull cache, but don't on the first run that will publish the build on Sundays
-    if [[ "${CURRENT_DAY}" == "${BLESSED_DAY}" && "$POINT" == "1" && "${ghcr}" == "true" && ( "${github_event}" == "workflow_dispatch" || "${github_event}" == "merge_queue" ) ]]; then
+    if [[ "${CURRENT_DAY}" == "${BLESSED_DAY}" && "$POINT" == "1" && "${ghcr}" == "true" && ( "${github_event}" == "workflow_dispatch" || "${github_event}" == "merge_group" ) ]]; then
       echo "Not pulling build cache. Uploading fresh cache later."
     elif [[ "${pull}" == "true" ]]; then
       # We want to avoid using --allow-path-traversal
@@ -765,7 +761,7 @@ setup-cache $image=default_image $tag=default_tag $flavor=default_flavor $ghcr="
        [[ "${ghcr}" == "true" ]] && \
        [[ "${CURRENT_DAY}" == "${BLESSED_DAY}" ]] && \
        [[ "${POINT}" == "1" ]] && \
-       [[ ( "${github_event}" == "workflow_dispatch" || "${github_event}" == "merge_queue" ) ]]; then
+       [[ ( "${github_event}" == "workflow_dispatch" || "${github_event}" == "merge_group" ) ]]; then
 
       {{ just }} login-registry oras ghcr.io
       pushd "${BUILDAH_CACHE_DIR}"

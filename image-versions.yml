@@ -2,14 +2,14 @@ images:
   # https://gitlab.com/fedora/ostree/ci-test
   - name: kinoite
     image: quay.io/fedora-ostree-desktops/kinoite
-    tag: 44
-    digest: sha256:900f7b5ecbf86e685dc83628a6abadd53793e44499b9977a4d0c92b39248e54b
+    tag: 45
+    digest: sha256:752996b7783907e5862d8ccc790ffa144d3119368249a1e12184430c6ffac818
 
   # https://github.com/get-aurora-dev/common
   - name: common
     image: ghcr.io/get-aurora-dev/common
     tag: latest
-    digest: sha256:1f301431774cd7a432886214aa3955a4cdec6f36e927a45f7e39984cc446c0d6
+    digest: sha256:42a489e5bc776830833dbfdba1005ae58fcea14df3bc24cf64206489a2b5b479
 
   # https://github.com/ublue-os/brew
   # aurora-gravity: this must be the multi-arch *index* digest, not a per-arch
@@ -24,4 +24,4 @@ images:
   - name: chunkah
     image: quay.io/coreos/chunkah
     tag: latest
-    digest: sha256:ff8b8b466a942ec6000445d4001fc661e2fc5a952ad9ee29b4de9ab09d1d1708
+    digest: sha256:71e593421c5de7dcc7c8c5c50e98d3bac572055a76f399f61a491d123c20a523
