@@ -7,7 +7,11 @@ echo "::group:: ===$(basename "$0")==="
 
 set -eoux pipefail
 
+# Since Fedora 45, containers-common (and get-aurora-dev/common) ship the policy as
+# /usr/share/containers/policy.json only. An /etc copy, if present, takes precedence.
 POLICY=/etc/containers/policy.json
+[[ -f "${POLICY}" ]] || POLICY=/usr/share/containers/policy.json
+test -f "${POLICY}"
 KEY=/etc/pki/containers/aurora-gravity.pub
 test -f "${KEY}"
 
