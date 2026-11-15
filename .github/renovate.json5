@@ -4,22 +4,10 @@
     "config:best-practices"
   ],
 
-  "baseBranchPatterns": ["main", "stable-f44"],
+  "baseBranchPatterns": ["main", "/^stable-f[0-9][0-9]$/"],
 
   // Do not rebase when the default branch is updated
   "rebaseWhen": "never",
-    customManagers: [
-    {
-      customType: 'regex',
-      managerFilePatterns: [
-        '/^Justfile$/',
-      ],
-      matchStrings: [
-        '(?<justName>.+?)\\s:=\\s"(?<packageName>\\S+):(?<currentValue>\\S+)@(?<currentDigest>sha256:[a-f0-9]+?)"',
-      ],
-      datasourceTemplate: 'docker',
-    },
-    ],
 
   "packageRules": [
     {
@@ -34,13 +22,6 @@
     {
       "automerge": true,
       "matchManagers": ["dockerfile"],
-      "matchUpdateTypes": ["digest"]
-    },
-    {
-      // We always want to trigger a fresh build when we have a new base image on every branch
-      // so we get package and security updates
-      "matchDepNames": ["quay.io/fedora-ostree-desktops/kinoite"],
-      "automerge": true,
       "matchUpdateTypes": ["digest"]
     },
     {
@@ -64,7 +45,7 @@
       ],
       // Brew and common are not "security updates", they have to go through :testing/main first
       // to reach a stable release
-      "matchBaseBranches": ["stable-f44"],
+      "matchBaseBranches": ["/^stable-f[0-9][0-9]$/"],
       "enabled": false
     },
     {
@@ -72,9 +53,27 @@
       "matchDepNames": [
         "!oras-project/setup-oras",
         "!sigstore/cosign-installer",
+        "!sigstore/cosign",
+        "!zizmorcore/zizmor-action",
         "!anchore/sbom-action"
       ],
       "schedule": ["on sunday"]
+    },
+    // these two are needed because we don't really run images based on a schedule
+    // :testing/main branch must be defined first or else it overwrites rules for stable
+    {
+      "description": "Automerge kinoite digest updates on main with default merge strategy",
+      "matchDepNames": ["quay.io/fedora-ostree-desktops/kinoite"],
+      "matchUpdateTypes": ["digest"],
+      "automerge": true
+    },
+    {
+      "description": "Use merge commits when automerging into stable branches to match branch ruleset restrictions",
+      "matchDepNames": ["quay.io/fedora-ostree-desktops/kinoite"],
+      "matchUpdateTypes": ["digest"],
+      "matchBaseBranches": ["/^stable-f[0-9][0-9]$/"],
+      "automergeStrategy": "merge-commit",
+      "automerge": true
     }
   ]
 }

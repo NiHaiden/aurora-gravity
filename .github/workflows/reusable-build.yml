@@ -70,22 +70,12 @@ jobs:
         with:
           persist-credentials: false
 
-      # FIXME: We need both actions as we run out of space on /var/tmp, however this
-      # will still fail sometimes as even the smallest 72G runners have a
-      # chance of not having /mnt and only 20GB free. Please investigate this
-      # in the future
-
-      - name: Mount BTRFS for podman storage
-        id: container-storage-action
-        uses: ublue-os/container-storage-action@25e05be4948f77746938687877829d15c5038036
-        continue-on-error: true
-        with:
-          mount-opts: compress-force=zstd:2
-          loopback-free: '1'
-
       - name: Free Up Space
-        id: remove-unwanted-software
-        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
+        id: free-disk-space
+        uses: hastd/free-disk-space@68572aeaadb7f76bd408246328e95926323402b5 # v0.1.2
+        with:
+          # Newer runners ship with ~92G of free storage, so we can propably skip cleanup most of the time.
+          skip-if-available: "80"
 
       - name: Configure containers policy for build
         run: |
@@ -318,15 +308,6 @@ jobs:
           # cosign gets credentials from docker
           just login-registry docker ghcr.io
 
-      # Workaround bug where capital letters in your GitHub username make it impossible to push to GHCR.
-      # https://github.com/macbre/push-to-ghcr/issues/12
-      - name: Lowercase Registry
-        if: inputs.publish
-        env:
-          IMAGE_REGISTRY: ${{ env.IMAGE_REGISTRY }}
-        run: |
-          echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> $GITHUB_OUTPUT
-
       # Workaround bugs caused by pushing images but not signing them because of CI flakes
       # FIXME: once https://github.com/containers/podman/issues/27796 resolved
       - name: Push Ephemeral Tag
@@ -403,25 +384,25 @@ jobs:
         run: |
           just login-registry oras ghcr.io
 
-      - name: Upload SBOM
+      - name: Attach SBOM
         if: inputs.publish
-        id: upload-sbom
+        id: attach-sbom
         env:
-          IMAGE: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}
+          MATRIX_BASE_NAME: "${{ matrix.base_name }}"
+          MATRIX_STREAM_NAME: "${{ matrix.stream_name }}"
+          MATRIX_IMAGE_FLAVOR: "${{ matrix.image_flavor }}"
           DIGEST: ${{ steps.pre-push.outputs.digest }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
         run: |
-          SBOM="sbom_out/${IMAGE_NAME}/sbom.json"
+          set -euox pipefail
 
-          cd "$(dirname "${SBOM}")"
-          oras attach \
-          --artifact-type application/vnd.spdx+json \
-          --annotation filename=$(basename "$SBOM") \
-          "${IMAGE}@${DIGEST}" \
-          "$(basename ${SBOM})"
+          $(command -v just) attach-sbom \
+            --image "${MATRIX_BASE_NAME}" \
+            --tag "${MATRIX_STREAM_NAME}" \
+            --flavor "${MATRIX_IMAGE_FLAVOR}" \
+            --registry "${IMAGE_REGISTRY}" \
+            --digest "${DIGEST}"
 
-          sbom_digest=$(oras discover --format json "${IMAGE}@${DIGEST}" | jq -r '.referrers[] | select(.artifactType == "application/vnd.spdx+json") | .digest')
-
+          sbom_digest=$(< /tmp/sbom-digestfile)
           echo "sbom_digest=${sbom_digest}" >> $GITHUB_OUTPUT
 
       - name: Sign SBOM OCI Artifact
@@ -430,7 +411,7 @@ jobs:
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          SBOM_DIGEST: ${{ steps.upload-sbom.outputs.sbom_digest }}
+          SBOM_DIGEST: ${{ steps.attach-sbom.outputs.sbom_digest }}
         run: |
           cosign sign -y --use-signing-config=false --key env://COSIGN_PRIVATE_KEY ${IMAGE_REGISTRY}/${IMAGE_NAME}@${SBOM_DIGEST}
 

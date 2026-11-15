@@ -10,8 +10,8 @@ mv /usr/bin/plasma-welcome /usr/bin/plasma-welcome-original
 # Copy Files to Container
 rsync -rvKl /ctx/system_files/shared/ /
 
-# this adds bootc and ostree to the initramfs
-cp /usr/share/doc/bootc/baseimage/dracut/usr/lib/dracut.conf.d/10-bootc-base.conf /usr/lib/dracut/dracut.conf.d/
+# this removes the enablement for brew-up{d,gr}ade.timer, we use uupd
+rm -f /usr/lib/systemd/system-preset/01-homebrew.preset
 
 # Footgun, See: https://github.com/ublue-os/main/issues/598
 rm -f /usr/bin/chsh /usr/bin/lchsh
@@ -19,9 +19,6 @@ rm -f /usr/bin/chsh /usr/bin/lchsh
 # Add linuxbrew to the list of paths usable by `sudo`
 # not a sudoers.d override because we want to get updates from upstream and not break everything
 sed -Ei "s/secure_path = (.*)/secure_path = \1:\/home\/linuxbrew\/.linuxbrew\/bin/" /etc/sudoers
-
-# https://github.com/ublue-os/main/pull/334
-ln -s "/usr/share/fonts/google-noto-sans-cjk-fonts" "/usr/share/fonts/noto-cjk"
 
 # KDE Documentation is available online
 rm -rf /usr/share/doc/HTML
@@ -50,5 +47,12 @@ ln -s /usr/share/applications/dev.getaurora.offline-docs.desktop /usr/share/kglo
 # Meta+Enter rules
 desktop-file-edit --set-key=X-KDE-Shortcuts --set-value='Ctrl+Alt+T,Meta+Return' /usr/share/applications/org.kde.konsole.desktop
 ln -sf /usr/share/applications/org.kde.konsole.desktop /usr/share/kglobalaccel/org.kde.konsole.desktop
+
+# we don't want them to show up graphically
+for file in htop nvtop; do
+    if [[ -f "/usr/share/applications/${file}.desktop" ]]; then
+        desktop-file-edit --set-key=Hidden --set-value=true /usr/share/applications/${file}.desktop
+    fi
+done
 
 echo "::endgroup::"

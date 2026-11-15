@@ -10,8 +10,10 @@ set -eoux pipefail
 # https://github.com/ublue-os/main/blob/963609eaf01f7c2bb1a76821fe6d0ec269d2df25/build_files/install.sh#L56
 # https://github.com/ublue-os/packages/tree/1f77c7e7faa9ebad120609a10d79e0412376c3b7/packages/ublue-os-signing/src
 
-KEY1=$(jq -r '.transports.docker."ghcr.io/ublue-os"[0].keyPaths[0]' /etc/containers/policy.json)
-BACKUP_KEY=$(jq -r '.transports.docker."ghcr.io/ublue-os"[0].keyPaths[1]' /etc/containers/policy.json)
+POLICY_PATH="/usr/share/containers/policy.json"
+
+KEY1=$(jq -r '.transports.docker."ghcr.io/ublue-os"[0].keyPaths[0]' "${POLICY_PATH}")
+BACKUP_KEY=$(jq -r '.transports.docker."ghcr.io/ublue-os"[0].keyPaths[1]' "${POLICY_PATH}")
 KEY1_SHA256="af78ecfda6eb21c35195af3739341715e9cfc3f2f5911dd9c10b0670547bf6e8"
 BACKUP_KEY_SHA256="b723467015ba562d40b4645c98c51c65d8254bb59444f6e9962debcfe2315da0"
 
@@ -43,7 +45,7 @@ test -f /usr/share/flatpak/preinstall.d/bazaar.preinstall
 test -f /usr/lib/systemd/system/flatpak-add-fedora-repos.service && false
 
 # Is flathub enabled by default?
-test -f /etc/flatpak/remotes.d/flathub.flatpakrepo
+test -f /usr/share/flatpak/remotes.d/flathub.flatpakrepo
 
 # Make sure to not pull in the bazzite one
 rpm -q plasma-setup --qf "%{RELEASE}" | grep -q aurora
@@ -112,6 +114,11 @@ IMPORTANT_PACKAGES=(
     zsh
 )
 
+# lets only have cardwire in testing for now
+if [[ "${UBLUE_IMAGE_TAG}" == "testing" ]]; then
+  IMPORTANT_PACKAGES=( "${IMPORTANT_PACKAGES[@]}" cardwire-gui )
+fi
+
 for package in "${IMPORTANT_PACKAGES[@]}"; do
     rpm -q "${package}" >/dev/null || { echo "Missing package: ${package}... Exiting"; exit 1 ; }
 done
@@ -164,6 +171,14 @@ test -f /usr/lib64/m1n1/m1n1.bin
 test -f /usr/share/uboot/apple_m1/u-boot-nodtb.bin
 test -x /usr/libexec/aurora-gravity-m1n1-sync
 grep -q 'gzip -nc' /usr/bin/update-m1n1
+
+# Gravity's firmware tool must work with the system Python (it's an fc44 build, see 05-gravity-platform.sh)
+rpm -q --qf "%{RELEASE}" python3-gravity_firmware gravity-fwupdate | grep -q gravity
+python3 -c 'import gravity_firmware.update'
+gravity-fwextract --help >/dev/null
+if rpm -q uboot-tools >/dev/null 2>&1; then
+  rpm -q --qf "%{RELEASE}" uboot-tools | grep -q gravity || { echo "uboot-tools is not the Gravity build... Exiting"; exit 1; }
+fi
 systemctl is-enabled aurora-gravity-m1n1-sync.service | grep -q '^enabled$'
 
 # Gravity dracut modules (Apple platform drivers + vendor firmware loading) must be in the initramfs
@@ -181,6 +196,7 @@ UNWANTED_PACKAGES=(
     fedora-third-party
     firefox
     plasma-discover
+    xwaylandvideobridge
 )
 
 for package in "${UNWANTED_PACKAGES[@]}"; do
@@ -197,17 +213,6 @@ if [[ "${IMAGE_NAME}" =~ nvidia ]]; then
 )
   for package in "${NV_PACKAGES[@]}"; do
       rpm -q "${package}" >/dev/null || { echo "Missing NVIDIA package: ${package}... Exiting"; exit 1 ; }
-  done
-fi
-
-if [[ ${AKMODS_FLAVOR} =~ coreos ]]; then
-  ZFS_PACKAGES=(
-      kmod-zfs
-      zfs
-      python3-pyzfs
-)
-  for package in "${ZFS_PACKAGES[@]}"; do
-      rpm -q "${package}" >/dev/null || { echo "Missing ZFS package: ${package}... Exiting"; exit 1 ; }
   done
 fi
 
@@ -228,5 +233,7 @@ done
 if [[ "${IMAGE_FLAVOR}" == "dx" ]]; then
   /ctx/build_scripts/dx/10-tests-dx.sh;
 fi
+
+/ctx/build_scripts/shared/validate-repos.sh
 
 echo "::endgroup::"

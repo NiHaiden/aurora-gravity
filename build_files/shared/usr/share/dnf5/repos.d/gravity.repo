@@ -1,0 +1,14 @@
+# aurora-gravity: Gravity Linux only publishes fedora-44 chroots so far, so the
+# Fedora 45 image uses the fc44 builds. Switch back to fedora-$releasever-$basearch
+# once https://download.copr.fedorainfracloud.org/results/adevwithanidea/gravity/fedora-45-aarch64/
+# exists, and drop the python3-gravity_firmware workaround in 05-gravity-platform.sh.
+# Stays enabled at runtime so layered packages match the Gravity kernel and Mesa.
+[gravity]
+name=Gravity Linux (fedora-44 packages) - $basearch
+baseurl=https://download.copr.fedorainfracloud.org/results/adevwithanidea/gravity/fedora-44-$basearch/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-gravity
+skip_if_unavailable=False
+priority=10

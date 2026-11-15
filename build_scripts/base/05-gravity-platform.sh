@@ -30,7 +30,50 @@ GRAVITY_PACKAGES=(
     steam-gravity-proton-default
 )
 
+# --- Gravity's fc44 Python packages on a newer Fedora -----------------------
+# Gravity only publishes fedora-44 builds (see gravity.repo). python3-gravity_firmware
+# (gravity-fwextract, required by gravity-fwupdate -> metapackage-core) is pure Python
+# but requires python(abi) = 3.14, which Fedora 45 (Python 3.15) can't satisfy. Install
+# it without that one dependency and make the package importable from the system
+# Python. Drop this block once Gravity builds for the image's Fedora release.
+GF_PKG=python3-gravity_firmware
+GF_ABI=$(dnf5 -q repoquery --repo=gravity --latest-limit=1 --requires "${GF_PKG}" | sed -n 's/^python(abi) = //p')
+SYS_ABI=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+if [[ -n "${GF_ABI}" && "${GF_ABI}" != "${SYS_ABI}" ]]; then
+    echo "${GF_PKG} is built for Python ${GF_ABI}, system has ${SYS_ABI}: installing with relocation"
+    # Its other dependencies (liblzfse, python3dist(asn1), ...) must still be real
+    mapfile -t GF_DEPS < <(dnf5 -q repoquery --repo=gravity --latest-limit=1 --requires "${GF_PKG}" \
+        | grep -vE '^(python\(abi\)|rpmlib\()')
+    dnf5 -y install --setopt=install_weak_deps=False "${GF_DEPS[@]}"
+    GF_DL=$(mktemp -d)
+    dnf5 -y download --repo=gravity --destdir="${GF_DL}" "${GF_PKG}"
+    rpm -i --nodeps "${GF_DL}"/"${GF_PKG}"-*.rpm
+    rm -rf "${GF_DL}"
+    GF_SRC="/usr/lib/python${GF_ABI}/site-packages"
+    GF_DST="/usr/lib/python${SYS_ABI}/site-packages"
+    for path in "${GF_SRC}"/gravity_firmware "${GF_SRC}"/gravity_firmware-*.dist-info; do
+        ln -s "../../python${GF_ABI}/site-packages/$(basename "${path}")" "${GF_DST}/"
+    done
+    # /usr is read-only at runtime, so precompile for the system Python now
+    python3 -m compileall -q "${GF_SRC}/gravity_firmware"
+    python3 -c 'import gravity_firmware.update'
+fi
+
 dnf5 -y install --setopt=install_weak_deps=False "${GRAVITY_PACKAGES[@]}"
+
+# --- U-Boot ------------------------------------------------------------------
+# Gravity's U-Boot carries the Apple Silicon patches and ends up in m1n1 stage 2.
+# When Fedora's build is newer (F45: 2026.10 vs Gravity's 2026.07), the copy from
+# the base image is "already installed" and stays. Force Gravity's build and lock it.
+UBOOT_PKGS=()
+for pkg in uboot-images-armv8 uboot-tools; do
+    rpm -q "${pkg}" >/dev/null 2>&1 && UBOOT_PKGS+=("${pkg}")
+done
+dnf5 -y distro-sync --from-repo=gravity "${UBOOT_PKGS[@]}"
+for pkg in "${UBOOT_PKGS[@]}"; do
+    rpm -q --qf '%{RELEASE}\n' "${pkg}" | grep -q gravity || { echo "${pkg} is not the Gravity build"; exit 1; }
+done
+dnf5 versionlock add "${UBOOT_PKGS[@]}"
 
 # --- m1n1 stage 2 on ostree ------------------------------------------------
 # On a package-based system, kernel-install runs update-m1n1 and DTBs come from
