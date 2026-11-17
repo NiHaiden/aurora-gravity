@@ -57,8 +57,16 @@ FEDORA_PACKAGES=(
 )
 
 # rocm doesn't work well on nvidia
-if [[ ! "${IMAGE_NAME}" =~ nvidia ]]; then
+# aurora-gravity: rocm-hip/rocm-opencl are x86_64-only in Fedora, and there is
+# no AMD GPU on Apple Silicon anyway
+if [[ ! "${IMAGE_NAME}" =~ nvidia && "$(arch)" == "x86_64" ]]; then
   FEDORA_PACKAGES+=("rocm-hip" "rocm-opencl" "rocm-smi")
+fi
+
+# aurora-gravity: UEFI firmware for native (KVM) aarch64 guests in libvirt/virt-manager.
+# edk2-ovmf above only covers emulated x86_64 guests.
+if [[ "$(arch)" == "aarch64" ]]; then
+  FEDORA_PACKAGES+=("edk2-aarch64")
 fi
 
 dnf5 -y install "${FEDORA_PACKAGES[@]}"
