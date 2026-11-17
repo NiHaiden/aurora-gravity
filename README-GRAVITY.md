@@ -164,7 +164,10 @@ ujust dx-group         # add yourself to docker / libvirt / incus-admin / dialou
 
 `toggle-devmode` comes from get-aurora-dev/common. As shipped, it would switch to
 `aurora-dx-gravity`, which doesn't exist; `16-gravity-just.sh` patches it to use
-`<image>-dx`. To do it by hand:
+`<image>-dx`. The same script limits `ujust rebase-helper` / `ujust switch-stream` to
+`aurora-gravity{,-dx}` and the `stable`/`latest` streams. Upstream offers `aurora`,
+`aurora-dx`, the nvidia images and `testing`, none of which exist here. To switch by
+hand:
 
 ```bash
 sudo bootc switch --enforce-container-sigpolicy ghcr.io/nihaiden/aurora-gravity-dx:latest
