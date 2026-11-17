@@ -69,7 +69,16 @@ if [[ "$(arch)" == "aarch64" ]]; then
   FEDORA_PACKAGES+=("edk2-aarch64")
 fi
 
-dnf5 -y install "${FEDORA_PACKAGES[@]}"
+DNF_EXCLUDES=()
+# aurora-gravity: bcc Recommends kernel-devel, which would pull in Gravity's 4K
+# kernel-devel. gravity-platform-metapackage-core (needed by steam) conflicts with
+# it. Headers for the 16K kernel come from kernel-16k-devel instead
+# (02-install-gravity-kernel.sh).
+if [[ "$(arch)" == "aarch64" ]]; then
+  DNF_EXCLUDES+=("--exclude=kernel-devel")
+fi
+
+dnf5 -y install "${DNF_EXCLUDES[@]}" "${FEDORA_PACKAGES[@]}"
 
 # We could use Fedora's moby packages, these are "official"
 DOCKER_CE=(
