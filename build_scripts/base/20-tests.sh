@@ -187,6 +187,16 @@ for needle in gravity-firmware kernel-modules-gravity load-gravity-firmware.sh g
   grep -q -- "${needle}" <<<"${INITRD_LIST}" || { echo "initramfs is missing ${needle}... Exiting"; exit 1; }
 done
 
+# aurora-gravity: LibrePods (built from source) and its Bluetooth VendorID spoofing
+test -x /usr/bin/librepods
+if ldd /usr/bin/librepods | grep -q 'not found'; then
+  echo "librepods has unresolved libraries... Exiting"; ldd /usr/bin/librepods; exit 1
+fi
+grep -Eq '^[0-9a-f]{40}$' /usr/share/librepods/commit
+test -f /usr/share/icons/hicolor/256x256/apps/me.kavishdevar.librepods.png
+desktop-file-validate /usr/share/applications/me.kavishdevar.librepods.desktop
+grep -qx 'DeviceID = bluetooth:004C:0000:0000' /etc/bluetooth/main.conf
+
 # these packages are supposed to be removed
 # and are considered footguns
 UNWANTED_PACKAGES=(
