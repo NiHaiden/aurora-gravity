@@ -14,8 +14,10 @@ Universal Blue's x86-oriented kernel/akmods:
 | Kernel modules (xone, v4l2loopback, ZFS, NVIDIA) | yes | not included |
 | Arch | x86_64 | aarch64 only |
 
-Images: `ghcr.io/nihaiden/aurora-gravity:latest` (daily) and `:stable` (weekly),
-signed with [`aurora-gravity.pub`](system_files/shared/etc/pki/containers/aurora-gravity.pub).
+Images: `ghcr.io/nihaiden/aurora-gravity:latest` (daily) and `:stable` (weekly), plus
+the Developer Experience variant `ghcr.io/nihaiden/aurora-gravity-dx` with the same
+tags (see [below](#developer-experience-aurora-gravity-dx)). All are signed with
+[`aurora-gravity.pub`](system_files/shared/etc/pki/containers/aurora-gravity.pub).
 
 ## How the Apple Silicon bits work on ostree
 
@@ -136,6 +138,54 @@ Updates come from `uupd` automatically, or run `ujust update`. To roll back, run
   from any Linux environment that can mount them. Or reinstall Gravity with its
   installer.
 
+## Developer Experience (aurora-gravity-dx)
+
+`aurora-gravity-dx` is [Aurora-DX](https://docs.getaurora.dev/dx/aurora-dx-intro) on top
+of `aurora-gravity`. It has the same package set: VS Code, Docker CE, the Podman extras,
+libvirt/QEMU/virt-manager, Incus/LXC, Cockpit, the BPF tracing tools, android-tools and
+kcli. It's built from the same `build_scripts/dx/` scripts as upstream. Differences from
+upstream Aurora-DX:
+
+- **`kernel-16k-devel`** is included and must match the Gravity kernel exactly
+  (`10-tests-dx.sh` checks this), so DKMS and out-of-tree modules can build.
+- **No ROCm.** `rocm-hip`/`rocm-opencl` are x86_64-only in Fedora, and Apple Silicon
+  has no AMD GPU.
+- **`edk2-aarch64`** is added, so virt-manager can create UEFI aarch64 guests. Upstream
+  only ships the x86 `edk2-ovmf`.
+- No `-nvidia-open` variant.
+
+### Switching
+
+```bash
+ujust toggle-devmode   # aurora-gravity <-> aurora-gravity-dx, keeps your stream (latest/stable)
+# reboot, then:
+ujust dx-group         # add yourself to docker / libvirt / incus-admin / dialout
+```
+
+`toggle-devmode` comes from get-aurora-dev/common. As shipped, it would switch to
+`aurora-dx-gravity`, which doesn't exist; `16-gravity-just.sh` patches it to use
+`<image>-dx`. To do it by hand:
+
+```bash
+sudo bootc switch --enforce-container-sigpolicy ghcr.io/nihaiden/aurora-gravity-dx:latest
+```
+
+`--enforce-container-sigpolicy` only accepts `aurora-gravity-dx` if your *current*
+image's `policy.json` already trusts it. Every image built since DX was added trusts
+both repositories. On an older image, run `ujust update` and reboot first.
+
+### VMs and containers on Apple Silicon
+
+- **KVM only accelerates aarch64 guests.** x86_64 VMs (`qemu-system-x86-core` and
+  `edk2-ovmf` are included) run under TCG emulation, which works but is slow.
+- Apple CPUs have no 64K page granule, so guest kernels built for 64K pages
+  (for example `kernel-64k`) won't boot. Standard 4K aarch64 guests are fine.
+- x86_64 container images run through `qemu-user-static` binfmt, e.g.
+  `podman run --arch amd64 …` or `docker run --platform linux/amd64 …`.
+- The host uses 16K pages. A few arm64 binaries assume 4K pages and crash on start,
+  most often bundled `jemalloc` builds. That's a property of the binary or container
+  image, not of DX.
+
 ## Flatpak apps: pink windows / no GPU
 
 **Symptom:** every Flatpak app with GPU rendering opens as a solid pink (magenta)
@@ -177,8 +227,18 @@ What the script does:
 - Writes `FLATPAK_GL_DRIVERS=gravity` to
   `~/.config/environment.d/60-flatpak-gl-gravity.conf`.
 
-Check that it worked: `chrome://gpu` or Firefox's `about:support` should report
-**Apple M4** (or your chip) and Mesa `26.3.0-devel (git-<revision>)`.
+Check that it worked: quit the app completely, then open `chrome://gpu` or Firefox's
+`about:support`. The renderer should be the Gravity AGX driver, for example
+`ANGLE (Mesa, AGX G16G B1, OpenGL ES 3.0)` on M4. If it still shows the stock driver
+(`AGX G13/G14` on an M4) and the windows are pink, the app was started without
+`FLATPAK_GL_DRIVERS=gravity`. Log out and back in.
+
+`FLATPAK_GL_DRIVERS` has to be set in the environment of the `flatpak run` command
+itself, because Flatpak reads it there to choose which GL extension to mount.
+Setting it inside the sandbox does nothing: `flatpak override --env=…` and
+`flatpak run --env=…` leave the app on `GL.default`. The environment.d file the
+script writes covers everything you launch from the desktop session. In a shell
+started before you logged back in, run `export FLATPAK_GL_DRIVERS=gravity` first.
 
 **Keep it in sync with the host.** The extension has to match the kernel driver's
 interface, so rebuild it after a gravity Mesa or kernel update.
@@ -188,7 +248,11 @@ script only rebuilds Mesa.
 **Limitations:**
 - Only covers apps on the `25.08` runtime. For another runtime branch, run
   `RUNTIME_BRANCH=<branch> contrib/flatpak-gl-gravity.sh`; this needs a matching
-  `llvm22` SDK extension.
+  `llvm22` SDK extension. While `FLATPAK_GL_DRIVERS=gravity` is set, an app on a
+  branch with no `gravity` build gets no GL driver at all, not even the stock one.
+  `flatpak list --app --columns=application,runtime` shows which branches you need.
+- Per user: the extension and the env file live in your home directory. Other
+  accounts need to run the script themselves.
 - Switching back is just a matter of removing the env file and logging in again.
   Flatpak then falls back to `GL.default`, and the pink windows return.
 - Stopgap without building anything, per app:
@@ -221,7 +285,8 @@ brew config                # should print "Homebrew Ruby: …" without errors
 ## Building locally (on an Apple Silicon Linux machine)
 
 ```bash
-just build --image aurora-gravity --tag latest --flavor main   # needs podman/buildah, just, yq, cosign, skopeo
+just build --image aurora-gravity --tag latest --flavor main      # needs podman/buildah, just, yq, cosign, skopeo
+just build --image aurora-gravity-dx --tag latest --flavor main   # Developer Experience variant
 ```
 
 CI builds on GitHub's `ubuntu-26.04-arm` runners. See
