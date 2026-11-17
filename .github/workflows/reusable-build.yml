@@ -58,11 +58,9 @@ jobs:
         image_flavor: ${{ fromJson(inputs.image_flavors) }}
         base_name: ["${{ inputs.brand_name }}", "${{ inputs.brand_name }}-dx"]
         stream_name: ["${{ inputs.stream_name }}"]
+        # aurora-gravity: upstream excludes DX on aarch64 ("legacy"); Gravity is
+        # aarch64-only, so aurora-gravity-dx is built here as well.
         architecture: ${{ fromJson(inputs.architecture) }}
-        exclude:
-          # DX is "legacy", don't build them for arm
-          - architecture: aarch64
-            base_name: "${{ inputs.brand_name }}-dx"
 
     steps:
       - name: Checkout

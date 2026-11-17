@@ -57,11 +57,28 @@ FEDORA_PACKAGES=(
 )
 
 # rocm doesn't work well on nvidia
-if [[ ! "${IMAGE_NAME}" =~ nvidia ]]; then
+# aurora-gravity: rocm-hip/rocm-opencl are x86_64-only in Fedora, and there is
+# no AMD GPU on Apple Silicon anyway
+if [[ ! "${IMAGE_NAME}" =~ nvidia && "$(arch)" == "x86_64" ]]; then
   FEDORA_PACKAGES+=("rocm-hip" "rocm-opencl" "rocm-smi")
 fi
 
-dnf5 -y install "${FEDORA_PACKAGES[@]}"
+# aurora-gravity: UEFI firmware for native (KVM) aarch64 guests in libvirt/virt-manager.
+# edk2-ovmf above only covers emulated x86_64 guests.
+if [[ "$(arch)" == "aarch64" ]]; then
+  FEDORA_PACKAGES+=("edk2-aarch64")
+fi
+
+DNF_EXCLUDES=()
+# aurora-gravity: bcc Recommends kernel-devel, which would pull in Gravity's 4K
+# kernel-devel. gravity-platform-metapackage-core (needed by steam) conflicts with
+# it. Headers for the 16K kernel come from kernel-16k-devel instead
+# (02-install-gravity-kernel.sh).
+if [[ "$(arch)" == "aarch64" ]]; then
+  DNF_EXCLUDES+=("--exclude=kernel-devel")
+fi
+
+dnf5 -y install "${DNF_EXCLUDES[@]}" "${FEDORA_PACKAGES[@]}"
 
 # We could use Fedora's moby packages, these are "official"
 DOCKER_CE=(

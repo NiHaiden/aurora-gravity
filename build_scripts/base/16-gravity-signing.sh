@@ -1,7 +1,9 @@
 #!/usr/bin/bash
-# Trust ghcr.io/nihaiden/aurora-gravity images signed with the aurora-gravity
+# Trust ghcr.io/nihaiden/aurora-gravity{,-dx} images signed with the aurora-gravity
 # cosign key, so `bootc upgrade` / uupd can verify them (image-ref uses
-# ostree-image-signed:, see 18-image-info.sh).
+# ostree-image-signed:, see 18-image-info.sh). Both repositories are trusted in
+# every image so `ujust toggle-devmode` can switch between them with
+# --enforce-container-sigpolicy.
 
 echo "::group:: ===$(basename "$0")==="
 
@@ -15,16 +17,25 @@ test -f "${POLICY}"
 KEY=/etc/pki/containers/aurora-gravity.pub
 test -f "${KEY}"
 
-jq --arg key "${KEY}" '.transports.docker["ghcr.io/nihaiden/aurora-gravity"] = [
-  {
-    "type": "sigstoreSigned",
-    "keyPath": $key,
-    "signedIdentity": { "type": "matchRepository" }
-  }
-]' "${POLICY}" > "${POLICY}.new"
-mv "${POLICY}.new" "${POLICY}"
+GRAVITY_REPOS=(
+    ghcr.io/nihaiden/aurora-gravity
+    ghcr.io/nihaiden/aurora-gravity-dx
+)
+
+for repo in "${GRAVITY_REPOS[@]}"; do
+    jq --arg key "${KEY}" --arg repo "${repo}" '.transports.docker[$repo] = [
+      {
+        "type": "sigstoreSigned",
+        "keyPath": $key,
+        "signedIdentity": { "type": "matchRepository" }
+      }
+    ]' "${POLICY}" > "${POLICY}.new"
+    mv "${POLICY}.new" "${POLICY}"
+done
 chmod 0644 "${POLICY}"
 
-jq -e '.transports.docker["ghcr.io/nihaiden/aurora-gravity"][0].keyPath' "${POLICY}"
+for repo in "${GRAVITY_REPOS[@]}"; do
+    jq -e --arg repo "${repo}" '.transports.docker[$repo][0].keyPath' "${POLICY}"
+done
 
 echo "::endgroup::"

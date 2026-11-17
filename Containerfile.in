@@ -64,6 +64,7 @@ RUN --network=none \
     --mount=type=bind,from=ctx,source=/,target=/ctx \
     /ctx/build_scripts/base/16-override-install.sh && \
     /ctx/build_scripts/base/16-gravity-signing.sh && \
+    /ctx/build_scripts/base/16-gravity-just.sh && \
     /ctx/build_scripts/base/17-services.sh && \
     /ctx/build_scripts/base/18-image-info.sh && \
     /ctx/build_scripts/base/19-initramfs.sh && \
