@@ -173,9 +173,19 @@ hand:
 sudo bootc switch --enforce-container-sigpolicy ghcr.io/nihaiden/aurora-gravity-dx:latest
 ```
 
-`--enforce-container-sigpolicy` only accepts `aurora-gravity-dx` if your *current*
-image's `policy.json` already trusts it. Every image built since DX was added trusts
-both repositories. On an older image, run `ujust update` and reboot first.
+The switch is checked against your *current* image's `policy.json`. Every image built
+since DX was added trusts both repositories with `aurora-gravity.pub`, so the switch is
+signature-verified. Older images don't list `aurora-gravity-dx`, and their policy
+accepts unlisted repositories without any check. The switch still works, but that first
+pull isn't verified. Either run `ujust update` and reboot first, or verify the image
+yourself before switching:
+
+```bash
+cosign verify --key /etc/pki/containers/aurora-gravity.pub ghcr.io/nihaiden/aurora-gravity-dx:latest
+```
+
+Once you're on DX, its own policy trusts `aurora-gravity-dx`, so later updates are
+verified.
 
 ### VMs and containers on Apple Silicon
 
