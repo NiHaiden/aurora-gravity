@@ -25,6 +25,14 @@ COPY --from=brew /system_files /system_files/shared
 
 COPY /system_files /system_files
 
+/* aurora-gravity: LibrePods (AirPods control), built from source, see build_scripts/librepods/build.sh */
+/* just build passes the current upstream linux/rust commit as LIBREPODS_REF */
+FROM ${BASE_IMAGE}:${FEDORA_MAJOR_VERSION} AS librepods
+ARG LIBREPODS_REF="linux/rust"
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=cache,dst=/var/cache/libdnf5 \
+    /ctx/build_scripts/librepods/build.sh
+
 # /* aurora image section */
 FROM ${BASE_IMAGE}:${FEDORA_MAJOR_VERSION} AS base
 
@@ -56,6 +64,8 @@ RUN --mount=type=tmpfs,dst=/boot \
     /ctx/build_scripts/base/03-fetch.sh && \
     /ctx/build_scripts/base/05-gravity-platform.sh
 
+COPY --from=librepods /out/ /
+
 # /* Everything that can be done offline after things are in place should be done here */
 # /* dracut freaks out if /var is a different filesystem */
 RUN --network=none \
@@ -65,6 +75,7 @@ RUN --network=none \
     /ctx/build_scripts/base/16-override-install.sh && \
     /ctx/build_scripts/base/16-gravity-signing.sh && \
     /ctx/build_scripts/base/16-gravity-just.sh && \
+    /ctx/build_scripts/base/16-gravity-librepods.sh && \
     /ctx/build_scripts/base/17-services.sh && \
     /ctx/build_scripts/base/18-image-info.sh && \
     /ctx/build_scripts/base/19-initramfs.sh && \

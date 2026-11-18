@@ -32,6 +32,16 @@ setfattr -n user.update-interval -v "quarterly" "${BAZAAR[@]}"
 AURORA_DOCS_PDF="/usr/share/doc/aurora/aurora.pdf"
 setfattr -n user.component -v "aurora-offline-docs" "${AURORA_DOCS_PDF}"
 
+# aurora-gravity: LibrePods is built from source, not packaged (build_scripts/librepods/build.sh)
+LIBREPODS=(
+  /usr/bin/librepods
+  /usr/share/applications/me.kavishdevar.librepods.desktop
+  /usr/share/icons/hicolor/256x256/apps/me.kavishdevar.librepods.png
+  /usr/share/librepods/commit
+)
+setfattr -n user.component -v "librepods" "${LIBREPODS[@]}"
+setfattr -n user.update-interval -v "weekly" "${LIBREPODS[@]}"
+
 # TODO: everything else we can probably add here
 FRAMEWORK_ICC=(/usr/share/color/icc/colord/framework1{3,6}.icc)
 setfattr -n user.component -v "never-change" "${FRAMEWORK_ICC[@]}"

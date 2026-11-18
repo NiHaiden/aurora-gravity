@@ -245,6 +245,13 @@ build $image=default_image $tag=default_tag $flavor=default_flavor $rechunk="fal
         BUILD_ARGS+=("--build-arg" "SHA_HEAD_SHORT=deadbeef")
     fi
     BUILD_ARGS+=("--build-arg" "UBLUE_IMAGE_TAG=${tag}")
+    # aurora-gravity: always build the newest LibrePods linux/rust commit (also busts the cached builder layer)
+    LIBREPODS_REF="$(git ls-remote https://github.com/librepods-org/librepods.git refs/heads/linux/rust | cut -f1)"
+    if [[ ! "${LIBREPODS_REF}" =~ ^[0-9a-f]{40}$ ]]; then
+        echo "Could not resolve LibrePods linux/rust HEAD (got: '${LIBREPODS_REF}')" >&2
+        exit 1
+    fi
+    BUILD_ARGS+=("--build-arg" "LIBREPODS_REF=${LIBREPODS_REF}")
 
     # Labels
     LABELS=()

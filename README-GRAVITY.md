@@ -295,6 +295,28 @@ brew vendor-install ruby   # shell-only command; fetches the arm64_linux portabl
 brew config                # should print "Homebrew Ruby: …" without errors
 ```
 
+## LibrePods (AirPods)
+
+[LibrePods](https://github.com/librepods-org/librepods) controls AirPods: battery
+level, listening modes, ear detection and more. It's ported from
+[strudelrora](https://github.com/NiHaiden/strudelrora). The published Linux release is
+very old, so every image build compiles the upstream `linux/rust` branch (the Rust
+rewrite upstream recommends) in a separate `librepods` stage of `Containerfile.in`
+(`build_scripts/librepods/build.sh`). `just build` resolves the branch's latest commit
+and passes it as the `LIBREPODS_REF` build-arg. Each image records the commit it
+contains in `/usr/share/librepods/commit`.
+
+The image also turns on
+[VendorID spoofing](https://github.com/librepods-org/librepods#vendorid-spoofing). It
+sets `DeviceID = bluetooth:004C:0000:0000` in `/etc/bluetooth/main.conf`, so the
+machine identifies as an Apple device to **every** Bluetooth peer. AirPods cache this
+value, so you may have to re-pair them once. If you have edited
+`/etc/bluetooth/main.conf` yourself, bootc keeps your copy and you have to add the line
+by hand.
+
+The image also ships `kairpods`, a separate AirPods app. Don't run both at the same
+time, because they would compete for the AirPods connection.
+
 ## Building locally (on an Apple Silicon Linux machine)
 
 ```bash
